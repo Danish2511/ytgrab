@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: "Fraunces", serif;
+  --font-body: "Inter", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+}
+
+html, body {
+  background: #12151B;
+  color: #EDEFF3;
+}
+
+.grain {
+  background-image: radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px);
+  background-size: 3px 3px;
+}
+
+.vu-bar {
+  width: 4px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #F2C574, #E8A33D);
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid #E8A33D;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise, .animate-bar1, .animate-bar2, .animate-bar3 {
+    animation: none !important;
+  }
+}
