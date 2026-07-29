@@ -1,57 +1,60 @@
-# Reel — self-hosted video/audio grabber
+# Reel — self-hosted video/audio grabber (Python + FastAPI + yt-dlp)
 
-A small Next.js app: paste a YouTube link, pick a resolution or grab audio as MP3, download the file. Runs entirely on your own server — no accounts, no third-party API keys, no data stored after the download completes.
+Paste a YouTube link, pick a resolution or grab audio as MP3, download the file. One FastAPI app serves both the API and the single-page frontend — no separate frontend build, no accounts, nothing stored after your download finishes.
+
+This is a rebuild of the original Next.js version using `yt-dlp` instead of a JS scraping library. `yt-dlp` is the most actively maintained tool of its kind — it ships fixes within days when YouTube changes something, which the Node-based libraries often lag behind on.
 
 ## ⚠️ Before you deploy
 
-Downloading YouTube videos can conflict with YouTube's Terms of Service depending on the content and what you do with it. Use this for videos you own, content that's Creative Commons / public domain, or personal backups of your own uploads — not for redistributing copyrighted material. You're responsible for how you use this once it's hosted under your name.
-
-## Local development
-
-```bash
-npm install
-npm run dev
-```
-
-Open http://localhost:3000.
+Downloading YouTube videos can conflict with YouTube's Terms of Service depending on the content and what you do with it. Use this for videos you own, Creative Commons / public domain content, or personal backups of your own uploads — not for redistributing copyrighted material. You're responsible for how you use this once it's hosted under your name.
 
 ## How it works
 
-- `app/api/formats/route.ts` — reads a YouTube URL with `@distube/ytdl-core` and returns available video resolutions plus a best-audio option.
-- `app/api/download/route.ts` — streams the chosen format to a temp file, and:
-  - **Audio**: converts to MP3 (192kbps) with `ffmpeg` (via `ffmpeg-static`, no system install needed).
-  - **Video, progressive formats (≤720p)**: streamed directly, already has audio baked in.
-  - **Video, higher resolutions**: YouTube serves these as separate video-only and audio-only streams, so the route downloads both and muxes them together with `ffmpeg` before sending the file.
-- `app/page.tsx` — the UI: URL input, thumbnail/title preview, a list of quality buttons, and an MP3 button.
+- `main.py` — a FastAPI app with two endpoints:
+  - `GET /api/info?url=...` — uses `yt-dlp` to read the video's metadata and available resolutions, returns JSON.
+  - `GET /api/download?url=...&type=video|audio&format_id=...` — downloads with `yt-dlp`, which handles all the muxing (combining a video-only stream with the best audio track) and MP3 conversion internally via `ffmpeg`. The file streams back, then gets deleted from the server automatically.
+- `static/index.html` — the entire frontend: plain HTML/CSS/JS, no build step, no framework. FastAPI serves it directly.
+- `imageio-ffmpeg` bundles a working `ffmpeg` binary for whichever OS you're on (Windows/Mac/Linux), so there's no separate ffmpeg install step and no npm-style install-script headaches.
+
+## Run it locally
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # Mac/Linux
+
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+Open http://localhost:8000.
 
 ## Deploying
 
-### Option A — Render / Railway / Fly.io (recommended)
+Python + `yt-dlp` + `ffmpeg` wants a real, long-lived server process — not Vercel's serverless functions, which aren't a good fit here (short execution limits, awkward binary support). Use one of these instead, all of which run the included `Dockerfile` with no changes needed:
 
-These platforms run a long-lived Node process, which suits ffmpeg muxing and larger files much better than a serverless function. A `Dockerfile` is included.
-
+### Render
 1. Push this repo to GitHub.
-2. On Render (or Railway/Fly): **New Web Service → connect repo → it will detect the Dockerfile automatically**.
-3. No environment variables are required.
-4. Deploy. That's it.
+2. **New → Web Service** → connect the repo → Render auto-detects the `Dockerfile`.
+3. Deploy. No environment variables required.
 
-### Option B — Vercel
-
-Works well for shorter videos and audio extraction. Keep in mind:
-
-- Vercel's serverless functions have a max execution time and payload size (the `vercel.json` in this repo raises `maxDuration` to 60s on the download route, which requires a **Pro** plan — on the free Hobby plan it's capped around 10s, which may be too short for muxing high-resolution video).
-- Very large files can exceed the response size limits of serverless functions.
-- If you hit these limits, Option A will be more reliable for anything beyond ~1080p or long videos.
-
-Steps:
+### Railway
 1. Push this repo to GitHub.
-2. Go to vercel.com → **Add New Project** → import the repo.
-3. Leave the defaults (Next.js is auto-detected) and deploy.
+2. **New Project → Deploy from GitHub repo** → Railway detects the `Dockerfile` automatically.
+3. Deploy.
+
+### Fly.io
+```bash
+fly launch     # detects the Dockerfile, follow the prompts
+fly deploy
+```
+
+All three give you a free tier that's enough for personal use.
 
 ## Notes on quality options
 
-YouTube stores video and audio as separate streams for anything above 720p (a platform limitation, not something this app can avoid). The app handles this transparently — pick any resolution and it will fetch and merge the matching audio automatically, but higher resolutions take a little longer to prepare than the instantly-streamed lower ones.
+YouTube stores resolutions above 720p as separate video and audio streams — `yt-dlp`'s `format_id+bestaudio` syntax (used in `main.py`) fetches both and merges them with `ffmpeg` automatically, so every resolution just works from the UI without any extra logic.
 
 ## Tech stack
 
-Next.js 14 (App Router) · TypeScript · Tailwind CSS · `@distube/ytdl-core` · `fluent-ffmpeg` + `ffmpeg-static`
+FastAPI · `yt-dlp` · `ffmpeg` (via `imageio-ffmpeg`) · vanilla HTML/CSS/JS frontend
