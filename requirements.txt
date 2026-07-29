@@ -1,0 +1,4 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+yt-dlp==2025.7.21
+imageio-ffmpeg==0.5.1
