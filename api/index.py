@@ -29,7 +29,7 @@ def get_info(url: str = Query(...)):
         "no_warnings": True,
         "skip_download": True,
         "noplaylist": True,
-        "extractor_args": CLIENT_ARGS,
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
