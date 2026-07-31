@@ -14,7 +14,14 @@ app = FastAPI(title="Reel")
 FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 TMP_DIR = tempfile.gettempdir()
 
-CLIENT_ARGS = {"youtube": {"player_client": ["android", "web"]}}
+CLIENT_ARGS = {"youtube": {"player_client": ["tv", "android", "web"]}}
+
+COOKIES_FILE = None
+_cookies_env = os.environ.get("YT_COOKIES")
+if _cookies_env:
+    COOKIES_FILE = os.path.join(TMP_DIR, "yt_cookies.txt")
+    with open(COOKIES_FILE, "w") as f:
+        f.write(_cookies_env)
 
 
 def sanitize(name: str) -> str:
@@ -29,8 +36,10 @@ def get_info(url: str = Query(...)):
         "no_warnings": True,
         "skip_download": True,
         "noplaylist": True,
-        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+        "extractor_args": CLIENT_ARGS,
     }
+    if COOKIES_FILE:
+        ydl_opts["cookiefile"] = COOKIES_FILE
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -92,6 +101,8 @@ def download(
         "ffmpeg_location": FFMPEG_PATH,
         "extractor_args": CLIENT_ARGS,
     }
+    if COOKIES_FILE:
+        ydl_opts["cookiefile"] = COOKIES_FILE
 
     if type == "audio":
         ydl_opts["format"] = "bestaudio/best"
