@@ -14,7 +14,9 @@ app = FastAPI(title="Reel")
 FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 TMP_DIR = tempfile.gettempdir()
 
-CLIENT_ARGS = {"youtube": {"player_client": ["tv", "android", "web"]}}
+CLIENT_ARGS = {
+    "youtube": {"player_client": ["android", "web"], "player_skip": ["configs"]}
+}
 
 COOKIES_FILE = None
 _cookies_env = os.environ.get("YT_COOKIES")
@@ -37,17 +39,25 @@ def get_info(url: str = Query(...)):
         "skip_download": True,
         "noplaylist": True,
         "extractor_args": CLIENT_ARGS,
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/138.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+        },
     }
     if COOKIES_FILE:
         ydl_opts["cookiefile"] = COOKIES_FILE
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-    except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail="Couldn't read that video. It may be private, age-restricted, or unavailable.",
-        )
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=str(e))
 
     formats = info.get("formats", []) or []
     seen_labels = set()
@@ -100,6 +110,14 @@ def download(
         "outtmpl": outtmpl,
         "ffmpeg_location": FFMPEG_PATH,
         "extractor_args": CLIENT_ARGS,
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/138.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+        },
     }
     if COOKIES_FILE:
         ydl_opts["cookiefile"] = COOKIES_FILE
@@ -124,17 +142,19 @@ def download(
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-    except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail="Download failed — it may have been too large to finish within the free plan's time limit. Try a lower quality, audio-only, or a shorter video.",
-        )
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=str(e))
 
     matches = glob.glob(os.path.join(TMP_DIR, f"{job_id}.{final_ext}"))
     if not matches:
         matches = glob.glob(os.path.join(TMP_DIR, f"{job_id}.*"))
     if not matches:
-        raise HTTPException(status_code=500, detail="Download finished but the file went missing.")
+        raise HTTPException(
+            status_code=500, detail="Download finished but the file went missing."
+        )
 
     filepath = matches[0]
     title = sanitize(info.get("title", "download"))
@@ -147,4 +167,9 @@ def download(
     background_tasks.add_task(cleanup, filepath)
 
     media_type = "audio/mpeg" if type == "audio" else "video/mp4"
-    return FileResponse(filepath, filename=download_name, media_type=media_type, background=background_tasks)
+    return FileResponse(
+        filepath,
+        filename=download_name,
+        media_type=media_type,
+        background=background_tasks,
+    )
